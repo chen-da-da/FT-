@@ -57,7 +57,7 @@ void SDCount(const TCHAR *path)
 	
 	res = f_open(&fil,path, FA_OPEN_EXISTING |FA_READ);
 	data_len = f_size(&fil);		//获取SD卡数据长度
-	res = f_close(&fil);
+
 	PASS = NG = NULL_= 0;
 	
 	slice = data_len/4096;		//获得分片数
@@ -66,10 +66,7 @@ void SDCount(const TCHAR *path)
 	{
 		for(i = 0;i < slice; i++)
 		{
-			res = f_open(&fil,path, FA_OPEN_EXISTING |FA_READ);
-			f_lseek(&fil,fil.fptr+4096*i);
 			res = f_read(&fil,SDbuff,4096,&bww);  //读取SD卡4096byte到缓存
-			res = f_close(&fil);
 			for(j = 0; j < 4096; j++)
 			{
 				if(SDbuff[j] == 0x55) PASS++;
@@ -78,8 +75,6 @@ void SDCount(const TCHAR *path)
 			}
 		}
 	}
-	res = f_open(&fil,path, FA_OPEN_EXISTING |FA_READ);
-	f_lseek(&fil,fil.fptr+4096*slice);
 	res = f_read(&fil,SDbuff,last,&bww);
 	res = f_close(&fil);
 	for(i = 0;i < last;i++)
