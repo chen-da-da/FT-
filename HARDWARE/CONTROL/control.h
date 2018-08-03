@@ -71,7 +71,7 @@ void ControlRec_Host(u8 *USART_RX_BUF);	//Ö÷¿ØÏìÓ¦º¯Êý
 void Deal_CMD(u8 *USART_RX_BUF,u16 len);
 void Add_Scheck(u8 *data,u16 len);
 u16 ReadDataLen(void);
-void SDCount(void);
+void SDCount(const TCHAR *path);
 void Framing(void);
 void ReadSD(u8 * buff);
 void CMD_ReadHandle(u8 *pBuff,u16 len);

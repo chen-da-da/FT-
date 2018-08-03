@@ -45,7 +45,7 @@ void Deal_CMD(u8 *CacheBuff,u16 len)
 **读SD卡函数
 **
 **/
-void SDCount()
+void SDCount(const TCHAR *path)
 {
 	u8 res;
 	u16 i,j;
@@ -53,13 +53,11 @@ void SDCount()
 	FIL fil;
 	UINT bww;
 	u32 data_len,slice,last;
-	u8 SDbuff[4096];
+	u8 SDbuff[4096*2];
 	
-	res = f_open(&fil,"0:/BANK2/FLAG.TXT", FA_OPEN_EXISTING |FA_READ);
-	//mf_open("0:/BANK2/FLAG.TXT", FA_OPEN_EXISTING|FA_READ);
+	res = f_open(&fil,path, FA_OPEN_EXISTING |FA_READ);
 	data_len = f_size(&fil);		//获取SD卡数据长度
 	res = f_close(&fil);
-	Dispaly_5x8_string(1,1,"File open",0);
 	PASS = NG = NULL_= 0;
 	
 	slice = data_len/4096;		//获得分片数
@@ -68,37 +66,28 @@ void SDCount()
 	{
 		for(i = 0;i < slice; i++)
 		{
-			res = f_open(&fil,"0:/BANK2/FLAG.TXT", FA_OPEN_EXISTING |FA_READ);
+			res = f_open(&fil,path, FA_OPEN_EXISTING |FA_READ);
 			f_lseek(&fil,fil.fptr+4096*i);
 			res = f_read(&fil,SDbuff,4096,&bww);  //读取SD卡4096byte到缓存
 			res = f_close(&fil);
-			//mf_read(4096);
 			for(j = 0; j < 4096; j++)
 			{
 				if(SDbuff[j] == 0x55) PASS++;
 				else if(SDbuff[j] == 0xaa) NG++;
 				else if(SDbuff[j] == 0x88) NULL_++;
 			}
-		//这里加偏移
-		//res = f_lseek(&fil,fil.fptr+4096*(i+1));
-		//mf_lseek(4096);
 		}
 	}
-	//res = f_lseek(&fil,8192);
-	res = f_open(&fil,"0:/BANK2/FLAG.TXT", FA_OPEN_EXISTING |FA_READ);
+	res = f_open(&fil,path, FA_OPEN_EXISTING |FA_READ);
 	f_lseek(&fil,fil.fptr+4096*slice);
 	res = f_read(&fil,SDbuff,last,&bww);
 	res = f_close(&fil);
-	//mf_read(last);
 	for(i = 0;i < last;i++)
 	{
 		if(SDbuff[i] == 0x55) PASS++;
 		else if(SDbuff[i] == 0xaa) NG++;
 		else if(SDbuff[i] == 0x88) NULL_++;
 	}
-	//res = f_close(&fil);
-	//mf_close();
-	Dispaly_5x8_string(1,1,"File close",0);
 }
 
 /**
@@ -226,7 +215,7 @@ void CMD_ReadDataRight(u8 CMD_Type)
 	{
 		//只读良率回复
 		case TYPE_SET:
-			SDCount();			//统计良品、不良品数量
+			SDCount("0:/BANK2/FLAG.TXT");			//统计良品、不良品数量
 			Framing();			//组成发送帧，并发送
 			break;
 		
