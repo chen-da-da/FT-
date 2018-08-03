@@ -1,0 +1,335 @@
+#include "sys.h"
+#include "usart.h"
+#include "stm32f10x_it.h"
+
+
+//加入以下代码,支持printf函数,而不需要选择use MicroLIB
+#if 1
+#pragma import(__use_no_semihosting)
+//标准库需要的支持函数
+struct __FILE
+{
+    int handle;
+
+};
+
+FILE __stdout;
+//定义_sys_exit()以避免使用半主机模式
+_sys_exit(int x)
+{
+    x = x;
+}
+//重定义fputc函数
+int fputc(int ch, FILE *f)
+{
+    while((USART2->SR&0X40)==0);//循环发送,直到发送完毕 此处修改
+    USART2->DR = (u8) ch;
+    return ch;
+}
+#endif
+
+
+void SendData(USART_TypeDef * USARTx, u8 *String,u16 len)
+{
+    u8 i;
+    for(i=0; i<len; i++)
+    {
+        USART_SendData(USARTx, (u8)String[i]);
+        while((USARTx->SR&0X40)==0);	//等待发送结束
+    }
+}
+
+/**
+**usart1初始化配置
+**/
+void uart1_init(u32 bound)
+{
+    //GPIO端口设置
+    GPIO_InitTypeDef GPIO_InitStructure;
+    USART_InitTypeDef USART_InitStructure;
+    NVIC_InitTypeDef NVIC_InitStructure;
+
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1|RCC_APB2Periph_GPIOA, ENABLE);	//使能USART1，GPIOA时钟
+
+    //USART1_TX   GPIOA.9
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_9; //PA.9
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;	//复用推挽输出
+    GPIO_Init(GPIOA, &GPIO_InitStructure);//初始化GPIOA.9
+
+    //USART1_RX	  GPIOA.10初始化
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10;//PA10
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;//浮空输入
+    GPIO_Init(GPIOA, &GPIO_InitStructure);//初始化GPIOA.10
+
+    //Usart1 NVIC 配置
+    NVIC_InitStructure.NVIC_IRQChannel = USART1_IRQn;
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority=3 ;//抢占优先级3
+    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;		//子优先级3
+    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;			//IRQ通道使能
+    NVIC_Init(&NVIC_InitStructure);	//根据指定的参数初始化VIC寄存器
+
+    //USART 初始化设置
+
+    USART_InitStructure.USART_BaudRate = bound;//串口波特率
+    USART_InitStructure.USART_WordLength = USART_WordLength_8b;//字长为8位数据格式
+    USART_InitStructure.USART_StopBits = USART_StopBits_1;//一个停止位
+    USART_InitStructure.USART_Parity = USART_Parity_No;//无奇偶校验位
+    USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None;//无硬件数据流控制
+    USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;	//收发模式
+
+    USART_Init(USART1, &USART_InitStructure); //初始化串口1
+    USART_ITConfig(USART1, USART_IT_RXNE, ENABLE);//开启串口接受中断
+    USART_ITConfig(USART1, USART_IT_IDLE, ENABLE);
+    USART_Cmd(USART1, ENABLE);                    //使能串口1
+	USART_ClearFlag(USART1, USART_FLAG_TC);
+
+}
+
+
+/**
+**usart2初始化配置
+**/
+void uart2_init(u32 bound)
+{
+    //GPIO端口设置
+    GPIO_InitTypeDef GPIO_InitStructure;
+    USART_InitTypeDef USART_InitStructure;
+    NVIC_InitTypeDef NVIC_InitStructure;
+
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);	//GPIOA时钟
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART2,ENABLE);	//使能USART2,PA2->TX,PA3->RX
+
+    //USART2_TX   GPIOA.2
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_2; //PA.2
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;	//复用推挽输出
+    GPIO_Init(GPIOA, &GPIO_InitStructure);//初始化GPIOA.2
+
+    //USART2_RX	  GPIOA.3初始化
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3;//PA3
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;//浮空输入
+    GPIO_Init(GPIOA, &GPIO_InitStructure);//初始化GPIOA.3
+
+    //Usart2 NVIC 配置
+    NVIC_InitStructure.NVIC_IRQChannel = USART2_IRQn;
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority=3 ;//抢占优先级3
+    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 3;		//子优先级3
+    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;			//IRQ通道使能
+    NVIC_Init(&NVIC_InitStructure);	//根据指定的参数初始化VIC寄存器
+
+    //USART 初始化设置
+
+    USART_InitStructure.USART_BaudRate = bound;//串口波特率
+    USART_InitStructure.USART_WordLength = USART_WordLength_8b;//字长为8位数据格式
+    USART_InitStructure.USART_StopBits = USART_StopBits_1;//一个停止位
+    USART_InitStructure.USART_Parity = USART_Parity_No;//无奇偶校验位
+    USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None;//无硬件数据流控制
+    USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;	//收发模式
+
+    USART_Init(USART2, &USART_InitStructure); //初始化串口2
+    USART_ITConfig(USART2, USART_IT_RXNE, ENABLE);//开启串口接受中断
+    USART_ITConfig(USART2, USART_IT_IDLE, ENABLE);
+    USART_Cmd(USART2, ENABLE);                    //使能串口2
+	USART_ClearFlag(USART2, USART_FLAG_TC);
+}
+
+
+
+/**
+**usart3初始化配置
+**/
+void uart3_init(u32 bound)
+{
+    //GPIO端口设置
+    GPIO_InitTypeDef GPIO_InitStructure;
+    USART_InitTypeDef USART_InitStructure;
+    NVIC_InitTypeDef NVIC_InitStructure;
+
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);	//GPIOB时钟
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART3,ENABLE);	//使能USART3,PB10->TX,PB11->RX
+
+    //USART3_TX   GPIOB.10
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10; //PA.10
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;	//复用推挽输出
+    GPIO_Init(GPIOB, &GPIO_InitStructure);//初始化GPIOA.10
+
+    //USART3_RX	  GPIOB.11初始化
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_11;//PB11
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;//浮空输入
+    GPIO_Init(GPIOB, &GPIO_InitStructure);//初始化GPIOA.3
+
+    //Usart3 NVIC 配置
+    NVIC_InitStructure.NVIC_IRQChannel = USART3_IRQn;
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority=3 ;//抢占优先级3
+    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 3;		//子优先级3
+    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;			//IRQ通道使能
+    NVIC_Init(&NVIC_InitStructure);	//根据指定的参数初始化VIC寄存器
+
+    //USART3 初始化设置
+
+    USART_InitStructure.USART_BaudRate = bound;//串口波特率
+    USART_InitStructure.USART_WordLength = USART_WordLength_8b;//字长为8位数据格式
+    USART_InitStructure.USART_StopBits = USART_StopBits_1;//一个停止位
+    USART_InitStructure.USART_Parity = USART_Parity_No;//无奇偶校验位
+    USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None;//无硬件数据流控制
+    USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;	//收发模式
+
+    USART_Init(USART3, &USART_InitStructure); //初始化串口3
+    USART_ITConfig(USART3, USART_IT_RXNE, ENABLE);//开启串口接受中断
+    USART_ITConfig(USART3, USART_IT_IDLE, ENABLE);
+    USART_Cmd(USART3, ENABLE);                    //使能串口3
+	USART_ClearFlag(USART3, USART_FLAG_TC);
+}
+
+
+
+/**
+**usart4初始化配置
+**/
+void uart4_init(u32 bound) {
+    //GPIO端口设置
+    GPIO_InitTypeDef GPIO_InitStructure;
+    USART_InitTypeDef USART_InitStructure;
+    NVIC_InitTypeDef NVIC_InitStructure;
+
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC, ENABLE);	//使能GPIOA时钟
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_UART4, ENABLE);	//使能UART4
+
+    //USART4_TX   GPIOC.10
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10; //PC10
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;	//复用推挽输出
+    GPIO_Init(GPIOC, &GPIO_InitStructure);//初始化GPIOC.10
+
+    //USART4_RX	  GPIOC.11初始化
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_11;//PC11
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;//浮空输入
+    GPIO_Init(GPIOC, &GPIO_InitStructure);//初始化GPIOC.11
+
+    //Usart4 NVIC 配置
+   NVIC_InitStructure.NVIC_IRQChannel = UART4_IRQn;
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority=3 ;//抢占优先级3
+    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 3;		//子优先级3
+    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;			//IRQ通道使能
+    NVIC_Init(&NVIC_InitStructure);	//根据指定的参数初始化VIC寄存器
+
+    //USART 初始化设置
+
+    USART_InitStructure.USART_BaudRate = bound;//串口波特率
+    USART_InitStructure.USART_WordLength = USART_WordLength_8b;//字长为8位数据格式
+    USART_InitStructure.USART_StopBits = USART_StopBits_1;//一个停止位
+    USART_InitStructure.USART_Parity = USART_Parity_No;//无奇偶校验位
+    USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None;//无硬件数据流控制
+    USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;	//收发模式
+
+    USART_Init(UART4, &USART_InitStructure); //初始化串口4
+    USART_ITConfig(UART4, USART_IT_RXNE, ENABLE);//开启串口接受中断
+    USART_ITConfig(UART4, USART_IT_IDLE, ENABLE);
+    USART_Cmd(UART4, ENABLE);                    //使能串口4
+	USART_ClearFlag(UART4, USART_FLAG_TC);
+
+}
+
+
+
+/**
+**usart5初始化配置
+**/
+void uart5_init(u32 bound)
+{
+    //GPIO端口设置
+    GPIO_InitTypeDef GPIO_InitStructure;
+    USART_InitTypeDef USART_InitStructure;
+    NVIC_InitTypeDef NVIC_InitStructure;
+
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC|RCC_APB2Periph_GPIOD, ENABLE);	//GPIOC GPIOD时钟
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_UART5,ENABLE);	//使能UART5,PC12->TX,PD2->RX
+
+    //USART5_TX   GPIOC.12
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_12; //PC.12
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;	//复用推挽输出
+    GPIO_Init(GPIOC, &GPIO_InitStructure);//初始化GPIOC.12
+
+    //USART5_RX	  GPIOD.2初始化
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_2;//PD2
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;//浮空输入
+    GPIO_Init(GPIOD, &GPIO_InitStructure);//初始化GPIOD.2
+
+    //Usart5 NVIC 配置
+    NVIC_InitStructure.NVIC_IRQChannel = UART5_IRQn;
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority=3 ;//抢占优先级3
+    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 3;		//子优先级3
+    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;			//IRQ通道使能
+    NVIC_Init(&NVIC_InitStructure);	//根据指定的参数初始化VIC寄存器
+
+    //USART 初始化设置
+    USART_InitStructure.USART_BaudRate = bound;//串口波特率
+    USART_InitStructure.USART_WordLength = USART_WordLength_8b;//字长为8位数据格式
+    USART_InitStructure.USART_StopBits = USART_StopBits_1;//一个停止位
+    USART_InitStructure.USART_Parity = USART_Parity_No;//无奇偶校验位
+    USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None;//无硬件数据流控制
+    USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;	//收发模式
+
+    USART_Init(UART5, &USART_InitStructure); //初始化串口5
+    USART_ITConfig(UART5, USART_IT_RXNE, ENABLE);//开启串口接受中断
+    USART_ITConfig(UART5, USART_IT_IDLE, ENABLE);
+    USART_Cmd(UART5, ENABLE);                    //使能串口5
+	USART_ClearFlag(UART5, USART_FLAG_TC);
+}
+
+/*****************  发送一个字符 **********************/
+static void Usart_SendByte( USART_TypeDef * pUSARTx, uint8_t ch )
+{
+	/* 发送一个字节数据到USART1 */
+	USART_SendData(pUSARTx,ch);
+		
+	/* 等待发送完毕 */
+	while (USART_GetFlagStatus(pUSARTx, USART_FLAG_TXE) == RESET);	
+}
+/*****************  指定长度的发送字符串 **********************/
+void Usart_SendStr_length( USART_TypeDef * pUSARTx, uint8_t *str,uint32_t strlen )
+{
+	unsigned int k=0;
+    do 
+    {
+        Usart_SendByte( pUSARTx, *(str + k) );
+        k++;
+    } while(k < strlen);
+}
+
+/*****************  发送字符串 **********************/
+void Usart_SendString( USART_TypeDef * pUSARTx, uint8_t *str)
+{
+	unsigned int k=0;
+    do 
+    {
+        Usart_SendByte( pUSARTx, *(str + k) );
+        k++;
+    } while(*(str + k)!='\0');
+}
+
+void LCD_Init()
+{
+	GPIO_InitTypeDef  GPIO_InitStructure;
+ 	
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOD|RCC_APB2Periph_GPIOF, ENABLE);	 //使能PD,PF端口时钟
+	
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_8;				 //LED0-->PB.5 端口配置
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP; 		 //推挽输出
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;		 //IO口速度为50MHz
+	GPIO_Init(GPIOD, &GPIO_InitStructure);					 //根据设定参数初始化GPIOB.5
+	GPIO_SetBits(GPIOD,GPIO_Pin_8);						 //PB.5 输出高
+	
+	//蜂鸣器配置
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_15;				 //PF15端口配置
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP; 		 //推挽输出
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;		 //IO口速度为50MHz
+	GPIO_Init(GPIOF, &GPIO_InitStructure);					 //根据设定参数初始化
+	GPIO_SetBits(GPIOF,GPIO_Pin_15);						 //PF.15 输出高
+}
+
+
+

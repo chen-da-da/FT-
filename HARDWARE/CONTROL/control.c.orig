@@ -1,0 +1,114 @@
+#include "control.h"
+
+#define CMD_READ 0x16
+#define CMD_SET 0x17
+#define CMD_WIFI1 'a'
+#define CMD_WIFI2 '+'
+
+
+/**
+**处理CMD函数
+**参数：pBuff指向串口帧缓存，len缓存长度
+**/
+void Deal_CMD(u8 *pBuff,u16 len)
+{
+	u8 Sendbuff[140];		//发送缓存
+	u8 ErrorBuff[10] ={0};	//校验和错误缓存
+	u8 i=0;
+	u8 IPString[16];
+	switch(pBuff[0])
+	{
+		//读命令
+		case CMD_READ:
+			//判断校验和是否正确
+			if(Check_Data(pBuff,len))
+			{
+				ReadSD(Sendbuff);				//读SD卡
+				Add_Scheck(Sendbuff,138);		//加校验和
+				SendData(UART5,Sendbuff,140);	//发送帧
+				
+			}
+			else
+			{
+				SendData(UART5, ErrorBuff,10);				
+			}
+		break;
+			
+		//配置命令
+		case CMD_SET:
+			if(Check_Data(pBuff,len))
+			{
+			}
+			else
+			{
+				SendData(UART5, ErrorBuff,10);			
+			}
+		break;
+			
+		//获取IP
+		case CMD_WIFI1:
+		case CMD_WIFI2:
+			//获取IP
+			if((pBuff[5] == 'D'&&pBuff[6] == 'H')||(pBuff[4] == 'D'&&pBuff[5] == 'H'))
+			{
+				do
+				{
+					IPString[i] = pBuff[i+10];
+					i++;
+				}while(pBuff[i+10] != 0x2c);
+				Usart_SendString(USART1, IPString);
+			}
+			//判断WiFi连接状态
+			else if(pBuff[5] == 'o'||pBuff[4] == 'o')
+			{
+				if(pBuff[6] == 'n'||pBuff[5] == 'n')
+				{
+					Usart_SendString(USART1, "Connect");
+				}
+				else
+				{
+					Usart_SendString(USART1, "Disconnect");
+				}
+			}
+		break;
+		}
+}
+/**
+**读SD卡函数
+**功能：读取SD卡测试数据，统计OK NG数量，并把数据放到发送缓存Sendbuff
+**/
+void ReadSD(u8 *Sendbuff)
+{
+	u8 i,j;
+	u8  string[16] ={0x00,0x94,0x00,0x00,0x00,0x00,
+	0x00,0xaa,0x00,0x88,0x00,0x00,0x00,0x00,0x00,0x00};	//模拟FT板数据
+	//模拟帧头数据
+	Sendbuff[0] = 0x16;
+	Sendbuff[1] = 0x01;
+	Sendbuff[2] = 0x00;
+	Sendbuff[3] = 0x00;
+	Sendbuff[4] = 0x8c;
+	Sendbuff[5] = 0x00;
+	Sendbuff[6] = 0x55;
+	Sendbuff[7] = 0x22;
+	Sendbuff[8] = 0x02;
+	Sendbuff[9] = 0x08;
+	for(i= 10,j=0;i<138;i++,j++,j%=16)
+	{
+		Sendbuff[i] = string[j];
+	}
+}
+
+/**
+**加校验和函数
+**功能：在传入的data后面两位加校验和
+**/
+void Add_Scheck(u8 *data,u16 len)
+{
+	u16 checksum;
+	checksum = (u16)checksum_32(data,len);
+	data[len] = checksum&0x00ff;
+	data[len+1] = checksum>>8;
+}
+
+

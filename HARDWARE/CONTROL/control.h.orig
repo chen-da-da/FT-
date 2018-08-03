@@ -1,0 +1,57 @@
+#ifndef __CONTROL_H
+#define __CONTROL_H
+
+#include "checksum.h"
+#include "sys.h"
+#include "usart.h"
+#include "stdio.h"
+#include "string.h"
+#include "wifi.h"
+
+//帧头尾部联合体
+union Tail
+{
+	u8 Cs[2];	//校验和
+	u16 Mfstate_Count;	//机台状态和FT板数量
+};
+
+
+//帧头数据
+__packed typedef struct 
+{ 
+	u8 type;	//命令类型
+	u8 pack;	//总包数
+	u8 packindex;//包号
+	u16 len;	//帧长度
+	u16 MIFNO;	//机台编号
+	//union Tail tail;
+}Pack_Head;
+
+//帧数据（FT板数据）
+__packed typedef struct 
+{
+	u8 index;	//机位
+	u16 FTID;	//FT板编号
+	u8 state;	//FT状态
+	u32 OKNO;	//pass数量
+	u32 NGNO;	//NG数量
+	u32 null_;	//预留
+}Data;
+
+//只读良率
+__packed typedef struct
+{
+	u8 cmd;	//命令
+	Pack_Head packHeadData;	//帧头
+	Data  currentData;	//帧数据
+	u16 Cs;	//校验和
+}Frame;
+
+
+void ControlRec_Host(u8 *USART_RX_BUF);	//主控响应函数
+void Deal_CMD(u8 *USART_RX_BUF,u16 len);
+void ReadSD(u8 *Sendbuff);
+void Add_Scheck(u8 *data,u16 len);
+
+#endif
+
